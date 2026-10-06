@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Valheim's Unity 6 Mono runtime implements .NET Standard 2.1, same as the game assemblies -->
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>SpawnBlocker</AssemblyName>
+    <RootNamespace>SpawnBlocker</RootNamespace>
+    <!-- Keep in sync with SpawnBlocker.PluginVersion and Package/manifest.json, Release builds fail if they differ -->
+    <Version>0.1.0</Version>
+    <LangVersion>latest</LangVersion>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>portable</DebugType>
+    <!-- The game assemblies reference Mono's System.IO.Compression/System.Net.Http versions, which this mod doesn't use -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <!-- Optional local overrides (VALHEIM_INSTALL, JOTUNN_DLL, MOD_DEPLOYPATH), see README -->
+  <Import Project="$(MSBuildThisFileDirectory)..\Environment.props" Condition="Exists('$(MSBuildThisFileDirectory)..\Environment.props')" />
+
+  <PropertyGroup>
+    <VALHEIM_INSTALL Condition="'$(VALHEIM_INSTALL)' == '' And '$(OS)' == 'Windows_NT'">C:\Program Files (x86)\Steam\steamapps\common\Valheim</VALHEIM_INSTALL>
+    <VALHEIM_INSTALL Condition="'$(VALHEIM_INSTALL)' == ''">$(HOME)/.local/share/Steam/steamapps/common/Valheim</VALHEIM_INSTALL>
+    <VALHEIM_MANAGED>$(VALHEIM_INSTALL)/valheim_Data/Managed</VALHEIM_MANAGED>
+    <BEPINEX_CORE>$(VALHEIM_INSTALL)/BepInEx/core</BEPINEX_CORE>
+    <!-- Thunderstore/r2modman layout first, then a manual install -->
+    <JOTUNN_DLL Condition="'$(JOTUNN_DLL)' == '' And Exists('$(VALHEIM_INSTALL)/BepInEx/plugins/ValheimModding-Jotunn/Jotunn.dll')">$(VALHEIM_INSTALL)/BepInEx/plugins/ValheimModding-Jotunn/Jotunn.dll</JOTUNN_DLL>
+    <JOTUNN_DLL Condition="'$(JOTUNN_DLL)' == ''">$(VALHEIM_INSTALL)/BepInEx/plugins/Jotunn/Jotunn.dll</JOTUNN_DLL>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx" HintPath="$(BEPINEX_CORE)/BepInEx.dll" Private="false" />
+    <Reference Include="0Harmony" HintPath="$(BEPINEX_CORE)/0Harmony.dll" Private="false" />
+    <Reference Include="Jotunn" HintPath="$(JOTUNN_DLL)" Private="false" />
+    <Reference Include="assembly_valheim" HintPath="$(VALHEIM_MANAGED)/assembly_valheim.dll" Private="false" />
+    <Reference Include="assembly_utils" HintPath="$(VALHEIM_MANAGED)/assembly_utils.dll" Private="false" />
+    <Reference Include="UnityEngine" HintPath="$(VALHEIM_MANAGED)/UnityEngine.dll" Private="false" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(VALHEIM_MANAGED)/UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="UnityEngine.AssetBundleModule" HintPath="$(VALHEIM_MANAGED)/UnityEngine.AssetBundleModule.dll" Private="false" />
+  </ItemGroup>
+
+  <Target Name="CheckValheimInstall" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(VALHEIM_MANAGED)/assembly_valheim.dll')" Text="Valheim not found at '$(VALHEIM_INSTALL)'. Set VALHEIM_INSTALL in Environment.props (see README)." />
+    <Error Condition="!Exists('$(BEPINEX_CORE)/BepInEx.dll')" Text="BepInEx not found in '$(VALHEIM_INSTALL)'. Install BepInExPack_Valheim first." />
+    <Error Condition="!Exists('$(JOTUNN_DLL)')" Text="Jotunn.dll not found at '$(JOTUNN_DLL)'. Install Jotunn or set JOTUNN_DLL in Environment.props." />
+  </Target>
+
+  <!-- Debug: copy the dll straight into the game when MOD_DEPLOYPATH is set -->
+  <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug' And '$(MOD_DEPLOYPATH)' != ''">
+    <Copy SourceFiles="$(TargetPath);$(TargetDir)$(TargetName).pdb" DestinationFolder="$(MOD_DEPLOYPATH)" />
+    <Message Importance="high" Text="Deployed $(TargetFileName) to $(MOD_DEPLOYPATH)" />
+  </Target>
+
+  <!-- Release: build the Thunderstore package in <repo>/Packages -->
+  <Target Name="ThunderstorePackage" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <PropertyGroup>
+      <PackageStaging>$(BaseIntermediateOutputPath)thunderstore/</PackageStaging>
+      <PackageOutput>$(MSBuildThisFileDirectory)../Packages/</PackageOutput>
+      <ManifestText>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)Package/manifest.json'))</ManifestText>
+      <SourceText>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)SpawnBlocker.cs'))</SourceText>
+    </PropertyGroup>
+    <Error Condition="!$(ManifestText.Contains('&quot;version_number&quot;: &quot;$(Version)&quot;'))" Text="Package/manifest.json version_number does not match the project Version $(Version)." />
+    <Error Condition="!$(SourceText.Contains('PluginVersion = &quot;$(Version)&quot;'))" Text="SpawnBlocker.PluginVersion does not match the project Version $(Version)." />
+    <RemoveDir Directories="$(PackageStaging)" />
+    <Copy SourceFiles="Package/manifest.json;Package/icon.png;../README.md" DestinationFolder="$(PackageStaging)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PackageStaging)plugins" />
+    <MakeDir Directories="$(PackageOutput)" />
+    <ZipDirectory SourceDirectory="$(PackageStaging)" DestinationFile="$(PackageOutput)SpawnBlocker-$(Version).zip" Overwrite="true" />
+    <Message Importance="high" Text="Thunderstore package: $(PackageOutput)SpawnBlocker-$(Version).zip" />
+  </Target>
+
+</Project>
