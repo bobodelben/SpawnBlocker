@@ -1,0 +1,10 @@
+{
+  "name": "SpawnBlocker",
+  "version_number": "0.1.0",
+  "website_url": "https://github.com/bobodelben/SpawnBlocker",
+  "description": "Buildable Spawn Blocker piece that keeps monsters from spawning or roaming around your base.",
+  "dependencies": [
+    "denikson-BepInExPack_Valheim-5.4.2351",
+    "ValheimModding-Jotunn-2.30.2"
+  ]
+}
